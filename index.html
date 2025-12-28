@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Head + Fist Audio Control</title>
+  <style>
+    body {
+      background:#0a0a0a;
+      color:white;
+      text-align:center;
+      font-family:Arial;
+    }
+    img {
+      border:3px solid #00ff88;
+      border-radius:12px;
+      max-width:80vw;
+      margin-top:20px;
+    }
+    .val {
+      font-size:2.2em;
+      color:#00ff88;
+      margin:10px;
+    }
+    button {
+      padding:15px 30px;
+      font-size:18px;
+      margin:10px;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🎧 Head PAN + ✊ Fist VOLUME</h1>
+
+<img id="cam">
+
+<div class="val">PAN: <span id="pan">0.00</span></div>
+<div class="val">VOL: <span id="vol">1.00</span></div>
+
+<button onclick="start()">▶ Start</button>
+<button onclick="stop()">⏹ Stop</button>
+
+<audio id="audio" loop>
+  <source src="song.mp3" type="audio/mpeg">
+</audio>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.min.js"></script>
+<script>
+const socket = io("http://127.0.0.1:5000");
+
+
+  const img = document.getElementById("cam");
+  const panTxt = document.getElementById("pan");
+  const volTxt = document.getElementById("vol");
+  const audio = document.getElementById("audio");
+
+  let ctx = null;
+  let panner = null;
+  let gain = null;
+  let started = false;
+
+  function start() {
+    if (!ctx) {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    // 🔥 IMPORTANT: resume AudioContext
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+
+    if (!panner) {
+      const src = ctx.createMediaElementSource(audio);
+      panner = ctx.createStereoPanner();
+      gain = ctx.createGain();
+
+      src.connect(panner);
+      panner.connect(gain);
+      gain.connect(ctx.destination);
+    }
+
+    audio.play();
+    socket.emit("start_tracking");
+    started = true;
+    console.log("▶ START pressed");
+  }
+
+  function stop() {
+    if (audio) audio.pause();
+    if (panner) panner.pan.value = 0;
+    if (gain) gain.gain.value = 1;
+    started = false;
+    console.log("⏹ STOP pressed");
+  }
+
+  // CAMERA FEED
+  socket.on("video_frame", data => {
+    img.src = "data:image/jpeg;base64," + data.frame;
+  });
+
+  // PAN + VOLUME
+  socket.on("audio_update", data => {
+    console.log("audio_update:", data); // 🔥 DEBUG
+
+    if (!started) return;
+
+    const pan = data.pan ?? 0;
+    const vol = data.volume ?? 1;
+
+    panTxt.innerText = pan.toFixed(2);
+    volTxt.innerText = vol.toFixed(2);
+
+    if (panner) panner.pan.value = pan;
+    if (gain) gain.gain.value = vol;
+  });
+</script>
+
+</body>
+</html>
